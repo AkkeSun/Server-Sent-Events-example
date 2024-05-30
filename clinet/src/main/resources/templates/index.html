@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>SSE Client</title>
+</head>
+<body>
+<h1>SSE Client</h1>
+<div>
+  <label for="clientId">Enter Client ID:</label>
+  <input type="text" id="clientId" name="clientId">
+  <button id="startStreamButton">Start Streaming</button>
+  <button id="stopStreamButton" style="display:none;">Stop Streaming</button>
+</div>
+<div id="messages"></div>
+
+<script>
+  let eventSource;
+
+  document.getElementById("startStreamButton").addEventListener("click", function() {
+    const clientId = document.getElementById("clientId").value; // 입력된 클라이언트 ID 가져오기
+    startStreaming(clientId);
+  });
+
+  document.getElementById("stopStreamButton").addEventListener("click", function() {
+    stopStreaming();
+  });
+
+  function startStreaming(clientId) {
+    eventSource = new EventSource(`http://localhost:8080/stream?id=${clientId}`);
+
+    eventSource.onopen = function() {
+      console.log("Connection opened");
+      document.getElementById("startStreamButton").style.display = "none"; // 시작 버튼 숨기기
+      document.getElementById("stopStreamButton").style.display = "inline-block"; // 종료 버튼 보이기
+    };
+
+    eventSource.onmessage = function(event) {
+      console.log("Received message:", event.data);
+      const messagesDiv = document.getElementById('messages');
+      const messageElem = document.createElement('div');
+      messageElem.textContent = event.data;
+      messagesDiv.appendChild(messageElem);
+    };
+
+    eventSource.addEventListener('broadcast event', function(event) {
+      console.log("Received broadcast event:", event.data);
+      const messagesDiv = document.getElementById('messages');
+      const messageElem = document.createElement('div');
+      messageElem.textContent = `Broadcast: ${event.data}`;
+      messagesDiv.appendChild(messageElem);
+    });
+
+    eventSource.onerror = function(error) {
+      console.error("Error:", error);
+      if (eventSource.readyState === EventSource.CLOSED) {
+        console.log("Connection was closed, attempting to reconnect...");
+        setTimeout(() => {
+          eventSource = new EventSource(`/stream?id=${clientId}`);
+        }, 5000);
+      }
+    };
+
+    window.addEventListener("beforeunload", () => {
+      stopStreaming();
+    });
+  }
+
+  function stopStreaming(clientId) {
+    if (eventSource) {
+      eventSource.close();
+      console.log("Connection closed");
+      document.getElementById("startStreamButton").style.display = "inline-block"; // 시작 버튼 보이기
+      document.getElementById("stopStreamButton").style.display = "none"; // 종료 버튼 숨기기
+
+      fetch(`http://localhost:8080/complete?id=${clientId}`, {
+        method: 'POST'
+      })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to complete stream');
+        }
+        console.log('Stream completed successfully');
+      })
+      .catch(error => {
+        console.error('Error completing stream:', error);
+      });
+    }
+  }
+</script>
+</body>
+</html>
